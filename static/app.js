@@ -22,7 +22,7 @@
   const state = {
     me: null, depts: [], reqs: [], notifs: [], subs: [], stats: null, admins: [],
     view: "req", adminTab: "post", filter: 0, sheet: null,
-    loginStep: 1, phone: "", devCode: "", busy: false,
+    loginStep: 1, email: "", devCode: "", busy: false,
   };
 
   let toastTimer;
@@ -74,13 +74,13 @@
     if (state.loginStep === 1) {
       return `<form class="card" data-form="otp">
         <h2>Welcome to Sewa</h2>
-        <p class="note">Enter your phone number. We send you a one-time code.</p>
-        <div class="field"><label for="l-phone">Phone number</label><input id="l-phone" inputmode="tel" autocomplete="tel" placeholder="10 digit mobile number" required value="${esc(state.phone)}"></div>
+        <p class="note">Enter your email address. We send you a one-time code.</p>
+        <div class="field"><label for="l-email">Email address</label><input id="l-email" type="email" inputmode="email" autocomplete="email" autocapitalize="none" placeholder="you@example.com" required value="${esc(state.email)}"></div>
         <button class="btn block" type="submit">Send code</button></form>`;
     }
     return `<form class="card" data-form="verify">
       <h2>Enter your code</h2>
-      <p class="note">Sent to ${esc(state.phone)}.</p>
+      <p class="note">We emailed a code to ${esc(state.email)}. It can take a minute. Check your spam folder too.</p>
       ${state.devCode ? `<div class="banner">Test mode: your code is ${esc(state.devCode)}</div>` : ""}
       <div class="field"><label for="l-code">Code</label><input id="l-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required value="${esc(state.devCode)}"></div>
       <div class="field"><label for="l-name">Your name (first time only)</label><input id="l-name" autocomplete="name"></div>
@@ -130,7 +130,9 @@
     const m = state.me;
     return `<form class="card" data-form="profile"><h2>My details</h2>
       <div class="field"><label for="m-name">Name</label><input id="m-name" value="${esc(m.name)}" required></div>
-      <div class="field"><label>Phone</label><input value="${esc(m.phone)}" disabled></div>
+      <div class="field"><label>Email (your login)</label><input value="${esc(m.email)}" disabled></div>
+      <div class="field"><label for="m-wa">WhatsApp number (optional)</label><input id="m-wa" inputmode="tel" autocomplete="tel" placeholder="10 digit mobile number" value="${esc(m.whatsapp_phone)}">
+        <span class="note">Add it only if you want alerts on WhatsApp. Leave it empty to get alerts inside Sewa only.</span></div>
       <div class="field"><label for="m-group">I am</label><select id="m-group">${["Brothers", "Sisters"].map((g) => `<option ${m.group === g ? "selected" : ""}>${g}</option>`).join("")}</select></div>
       <div class="field"><span class="label">When I am usually free</span><div class="chips" style="flex-wrap:wrap">${["Morning", "Afternoon", "Evening"].map((k) => `<button type="button" class="chip" data-a="av" data-k="${k}" aria-pressed="${m.availability.includes(k)}">${k}</button>`).join("")}</div></div>
       <button class="btn block" type="submit">Save</button></form>
@@ -210,15 +212,15 @@
       ${isSuper ? `<form class="card" data-form="dept"><h3>Add a department</h3><div class="form">
         <div class="field wide"><label for="d-name">Department</label><input id="d-name" required></div>
         <div class="field"><label for="d-inc">In-charge name</label><input id="d-inc" required></div>
-        <div class="field"><label for="d-phone">In-charge phone</label><input id="d-phone" inputmode="tel" required></div>
+        <div class="field"><label for="d-email">In-charge email</label><input id="d-email" type="email" inputmode="email" autocapitalize="none" required></div>
         <div class="field wide"><label for="d-place">Location name</label><input id="d-place"></div>
         <div class="field"><label for="d-lat">Latitude</label><input id="d-lat" type="number" step="any" inputmode="decimal"></div>
         <div class="field"><label for="d-lng">Longitude</label><input id="d-lng" type="number" step="any" inputmode="decimal"></div></div>
         <button class="btn block" type="submit">Add department and make in-charge admin</button></form>` : ""}
-      <div class="card"><h3>Admins</h3>${state.admins.map((a) => `<div class="li"><span><b>${esc(a.name)}</b><br><span class="note">${esc(a.phone)}</span></span><span class="acts"><span class="pill p-dept">${esc(a.dept_name)}</span>${a.id !== state.me.id ? `<button class="btn sm ghost" data-a="rmadmin" data-id="${a.id}">Remove</button>` : ""}</span></div>`).join("") || '<p class="note">No admins yet.</p>'}</div>
+      <div class="card"><h3>Admins</h3>${state.admins.map((a) => `<div class="li"><span><b>${esc(a.name)}</b><br><span class="note">${esc(a.email)}</span></span><span class="acts"><span class="pill p-dept">${esc(a.dept_name)}</span>${a.id !== state.me.id ? `<button class="btn sm ghost" data-a="rmadmin" data-id="${a.id}">Remove</button>` : ""}</span></div>`).join("") || '<p class="note">No admins yet.</p>'}</div>
       <form class="card" data-form="admin"><h3>Make a helper admin</h3><div class="form">
         <div class="field"><label for="a-name">Name</label><input id="a-name"></div>
-        <div class="field"><label for="a-phone">Phone</label><input id="a-phone" inputmode="tel" required></div>
+        <div class="field"><label for="a-email">Email</label><input id="a-email" type="email" inputmode="email" autocapitalize="none" required></div>
         ${isSuper ? `<div class="field wide"><label for="a-dept">Department</label><select id="a-dept">${state.depts.map((d) => `<option value="${d.id}">${esc(d.name)}</option>`).join("")}</select></div>` : `<p class="note wide">They become admins of your department only.</p>`}</div>
         <button class="btn block" type="submit">Make admin</button></form>`;
   }
@@ -361,16 +363,16 @@
     const kind = form.dataset.form;
     run(async () => {
       if (kind === "otp") {
-        state.phone = $("#l-phone").value.trim();
-        const res = await api("/auth/request-otp", { method: "POST", body: { phone: state.phone } });
+        state.email = $("#l-email").value.trim();
+        const res = await api("/auth/request-otp", { method: "POST", body: { email: state.email } });
         state.devCode = res.dev_code || ""; state.loginStep = 2; render();
       } else if (kind === "verify") {
-        const res = await api("/auth/verify", { method: "POST", body: { phone: state.phone, code: $("#l-code").value.trim(), name: $("#l-name").value.trim(), group: $("#l-group").value } });
+        const res = await api("/auth/verify", { method: "POST", body: { email: state.email, code: $("#l-code").value.trim(), name: $("#l-name").value.trim(), group: $("#l-group").value } });
         tokenStore.set(res.token); state.me = res.me; state.view = "req"; state.devCode = "";
         await loadAll(); render();
       } else if (kind === "profile") {
         const avail = [...document.querySelectorAll('[data-a="av"]')].filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.k);
-        state.me = await api("/me", { method: "PUT", body: { name: $("#m-name").value.trim(), group: $("#m-group").value, availability: avail } });
+        state.me = await api("/me", { method: "PUT", body: { name: $("#m-name").value.trim(), group: $("#m-group").value, availability: avail, whatsapp_phone: $("#m-wa").value.trim() } });
         await refresh(); toast("Saved");
       } else if (kind === "join") {
         const a = Number($("#j-from").value), b = Number($("#j-to").value), id = state.sheet.id;
@@ -387,17 +389,20 @@
         const res = await api(`/admin/requests/${state.sheet.id}/copy`, { method: "POST", body: { day: $("#c-day").value, start_time: $("#c-time").value, people_needed: Number($("#c-need").value) } });
         state.sheet = null; await refresh(); toast(res.alerted ? `Copy posted. Alert sent to ${res.alerted}` : "Copy posted");
       } else if (kind === "dept") {
-        await api("/admin/departments", { method: "POST", body: { name: $("#d-name").value.trim(), incharge_name: $("#d-inc").value.trim(), incharge_phone: $("#d-phone").value.trim(), place: $("#d-place").value.trim(), lat: Number($("#d-lat").value || 0), lng: Number($("#d-lng").value || 0) } });
+        await api("/admin/departments", { method: "POST", body: { name: $("#d-name").value.trim(), incharge_name: $("#d-inc").value.trim(), incharge_email: $("#d-email").value.trim(), place: $("#d-place").value.trim(), lat: Number($("#d-lat").value || 0), lng: Number($("#d-lng").value || 0) } });
         await loadAll(); state.admins = await api("/admin/admins"); render(); toast("Department added. The in-charge can now sign in as admin");
       } else if (kind === "admin") {
         const dept = $("#a-dept");
-        await api("/admin/admins", { method: "POST", body: { name: $("#a-name").value.trim(), phone: $("#a-phone").value.trim(), dept_id: dept ? Number(dept.value) : null } });
+        await api("/admin/admins", { method: "POST", body: { name: $("#a-name").value.trim(), email: $("#a-email").value.trim(), dept_id: dept ? Number(dept.value) : null } });
         state.admins = await api("/admin/admins"); render(); toast("Admin added");
       }
     });
   });
 
   /* ---------- start ---------- */
+  // Lets the browser offer "Install app" and keeps the app shell available when the connection is weak.
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+
   (async function start() {
     if (tokenStore.get()) {
       try { state.me = await api("/me"); await loadAll(); } catch { state.me = null; }

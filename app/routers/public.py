@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
 from ..db import get_session
-from ..deps import current_volunteer
+from ..deps import current_volunteer, normalize_phone
 from ..models import Department, Notification, Signup, Subscription, Volunteer, WorkRequest
 from ..services import as_utc, end_min, is_full, me_out, req_out, signups_of, start_min
 
@@ -18,6 +18,7 @@ class ProfileIn(BaseModel):
     name: str = Field(min_length=1, max_length=60)
     group: Literal["Brothers", "Sisters"]
     availability: list[Literal["Morning", "Afternoon", "Evening"]] = []
+    whatsapp_phone: str = Field(default="", max_length=20)
 
 
 class SubsIn(BaseModel):
@@ -36,6 +37,12 @@ def get_me(me: Volunteer = Depends(current_volunteer)):
 
 @router.put("/me")
 def update_me(body: ProfileIn, me: Volunteer = Depends(current_volunteer), session: Session = Depends(get_session)):
+    phone = ""
+    if body.whatsapp_phone.strip():
+        phone = normalize_phone(body.whatsapp_phone)
+        if not phone:
+            raise HTTPException(400, "The WhatsApp number needs 10 digits, or leave it empty")
+    me.whatsapp_phone = phone
     me.name = body.name.strip()
     me.group = body.group
     me.availability = ",".join(body.availability)

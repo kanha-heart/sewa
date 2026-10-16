@@ -1,6 +1,6 @@
-"""Login with phone number + one-time code (OTP).
-In DEV_MODE the code is printed in the server console AND returned to the browser, so you can test without SMS.
-For real users, send the code by SMS or WhatsApp and set DEV_MODE=0."""
+"""Login with email + one-time code (OTP).
+The code is emailed (see app/emailer.py). In DEV_MODE the code is also returned to the browser,
+so you can test on your own computer without email. Never use DEV_MODE on the internet."""
 import secrets
 from datetime import timedelta
 
@@ -8,21 +8,25 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from ..config import DEV_MODE, SUPERADMIN_PHONE
+from ..config import DEV_MODE, SUPERADMIN_EMAIL
 from ..db import get_session
-from ..deps import normalize_phone
+from ..deps import normalize_email
+from ..emailer import EmailError, send_login_code
 from ..models import GROUPS, LoginSession, Otp, Volunteer, utcnow
 from ..services import as_utc, me_out
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
+MAX_CODES_PER_HOUR = 5   # per email address
+MAX_WRONG_TRIES = 5      # then that code stops working
+
 
 class OtpIn(BaseModel):
-    phone: str
+    email: str
 
 
 class VerifyIn(BaseModel):
-    phone: str
+    email: str
     code: str
     name: str = ""
     group: str = ""
@@ -30,13 +34,23 @@ class VerifyIn(BaseModel):
 
 @router.post("/request-otp")
 def request_otp(body: OtpIn, session: Session = Depends(get_session)):
-    phone = normalize_phone(body.phone)
-    if not phone:
-        raise HTTPException(400, "Enter a 10 digit phone number")
+    email = normalize_email(body.email)
+    if not email:
+        raise HTTPException(400, "Enter a valid email address")
+
+    recent = session.exec(select(Otp).where(Otp.email == email).order_by(Otp.id.desc()).limit(20)).all()
+    cutoff = utcnow() - timedelta(hours=1)
+    if len([o for o in recent if as_utc(o.created_at) > cutoff]) >= MAX_CODES_PER_HOUR:
+        raise HTTPException(429, "Too many codes requested. Please try again in an hour.")
+
     code = f"{secrets.randbelow(10**6):06d}"
-    session.add(Otp(phone=phone, code=code, expires_at=utcnow() + timedelta(minutes=10)))
+    session.add(Otp(email=email, code=code, expires_at=utcnow() + timedelta(minutes=10)))
     session.commit()
-    print(f"[SEWA login code] {phone}: {code}")
+    try:
+        send_login_code(email, code)
+    except EmailError as e:
+        print(f"[SEWA email problem] {e}")
+        raise HTTPException(502, "We could not send the email. Please try again in a minute.")
     out = {"ok": True}
     if DEV_MODE:
         out["dev_code"] = code
@@ -45,19 +59,24 @@ def request_otp(body: OtpIn, session: Session = Depends(get_session)):
 
 @router.post("/verify")
 def verify(body: VerifyIn, session: Session = Depends(get_session)):
-    phone = normalize_phone(body.phone)
+    email = normalize_email(body.email)
     otp = session.exec(
-        select(Otp)
-        .where(Otp.phone == phone, Otp.code == body.code.strip(), Otp.used == False)  # noqa: E712
-        .order_by(Otp.id.desc())
+        select(Otp).where(Otp.email == email, Otp.used == False).order_by(Otp.id.desc())  # noqa: E712
     ).first()
     if not otp or as_utc(otp.expires_at) < utcnow():
         raise HTTPException(400, "That code is wrong or has expired")
+    if not secrets.compare_digest(otp.code.encode(), body.code.strip().encode()):
+        otp.attempts += 1
+        if otp.attempts >= MAX_WRONG_TRIES:
+            otp.used = True
+        session.add(otp)
+        session.commit()
+        raise HTTPException(400, "That code is wrong or has expired")
     otp.used = True
 
-    v = session.exec(select(Volunteer).where(Volunteer.phone == phone)).first()
+    v = session.exec(select(Volunteer).where(Volunteer.email == email)).first()
     if not v:
-        v = Volunteer(phone=phone)
+        v = Volunteer(email=email)
         session.add(v)
     if not v.profile_done:
         if not body.name.strip() or body.group not in GROUPS:
@@ -65,7 +84,7 @@ def verify(body: VerifyIn, session: Session = Depends(get_session)):
         v.name = body.name.strip()[:60]
         v.group = body.group
         v.profile_done = True
-    if phone == SUPERADMIN_PHONE:
+    if SUPERADMIN_EMAIL and email == SUPERADMIN_EMAIL:
         v.is_admin = True
         v.admin_dept_id = None
     session.add(v)

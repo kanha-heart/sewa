@@ -7,6 +7,14 @@ from sqlmodel import Session
 from .db import get_session
 from .models import LoginSession, Volunteer
 
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def normalize_email(raw: str) -> str:
+    """Lower-case and trim. Returns '' if it does not look like an email address."""
+    email = (raw or "").strip().lower()
+    return email if EMAIL_RE.match(email) and len(email) <= 120 else ""
+
 
 def normalize_phone(raw: str) -> str:
     """Keep the last 10 digits. Returns '' if there are fewer than 10."""

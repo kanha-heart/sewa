@@ -61,7 +61,8 @@ def alert_subscribers(session: Session, req: WorkRequest, headline: str) -> int:
         if not v or v.group != req.group:
             continue
         text = message_text(req, dept, v.name or "friend", headline)
-        status = send_whatsapp(v.phone, text)
+        # Everyone gets the alert inside the app. WhatsApp only if they added a number.
+        status = send_whatsapp(v.whatsapp_phone, text) if v.whatsapp_phone else "in-app"
         session.add(Notification(volunteer_id=v.id, text=text, status=status))
         sent += 1
     session.commit()

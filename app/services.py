@@ -49,7 +49,8 @@ def me_out(v: Volunteer) -> dict:
     return {
         "id": v.id,
         "name": v.name,
-        "phone": v.phone,
+        "email": v.email,
+        "whatsapp_phone": v.whatsapp_phone,
         "group": v.group,
         "availability": [a for a in v.availability.split(",") if a],
         "profile_done": v.profile_done,

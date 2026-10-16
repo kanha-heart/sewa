@@ -22,7 +22,8 @@ class Department(SQLModel, table=True):
 
 class Volunteer(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    phone: str = Field(index=True, unique=True)  # 10 digits
+    email: str = Field(index=True, unique=True)  # used to log in
+    whatsapp_phone: str = ""  # optional, 10 digits, used only for WhatsApp alerts
     name: str = ""
     group: str = "Brothers"  # "Brothers" or "Sisters"
     availability: str = ""  # comma list: Morning,Afternoon,Evening
@@ -41,10 +42,12 @@ class LoginSession(SQLModel, table=True):
 
 class Otp(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    phone: str = Field(index=True)
+    email: str = Field(index=True)
     code: str
     expires_at: datetime
     used: bool = False
+    attempts: int = 0
+    created_at: datetime = Field(default_factory=utcnow)
 
 
 class Subscription(SQLModel, table=True):

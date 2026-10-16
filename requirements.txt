@@ -3,4 +3,5 @@ uvicorn[standard]
 sqlmodel
 python-dotenv
 httpx
+psycopg2-binary
 pytest

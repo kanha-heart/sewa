@@ -1,5 +1,5 @@
 """Admin endpoints. A department admin manages only their own department.
-The top admin (SUPERADMIN_PHONE) manages everything and creates departments."""
+The top admin (SUPERADMIN_EMAIL) manages everything and creates departments."""
 from datetime import date
 from typing import Literal, Optional
 
@@ -7,9 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
-from ..config import SUPERADMIN_PHONE
+from ..config import SUPERADMIN_EMAIL
 from ..db import get_session
-from ..deps import normalize_phone, require_admin, require_super
+from ..deps import normalize_email, require_admin, require_super
 from ..models import Department, Signup, Volunteer, WorkRequest
 from ..notify import alert_subscribers
 from ..services import (
@@ -57,14 +57,14 @@ class CopyIn(BaseModel):
 class DeptIn(BaseModel):
     name: str = Field(min_length=1, max_length=60)
     incharge_name: str = Field(min_length=1, max_length=60)
-    incharge_phone: str
+    incharge_email: str
     place: str = ""
     lat: float = Field(default=0.0, ge=-90, le=90)
     lng: float = Field(default=0.0, ge=-180, le=180)
 
 
 class AdminIn(BaseModel):
-    phone: str
+    email: str
     name: str = ""
     dept_id: Optional[int] = None
 
@@ -198,9 +198,9 @@ def analytics(_: Volunteer = Depends(require_admin), session: Session = Depends(
 def create_department(body: DeptIn, me: Volunteer = Depends(require_super), session: Session = Depends(get_session)):
     if session.exec(select(Department).where(Department.name == body.name.strip())).first():
         raise HTTPException(409, "A department with this name already exists")
-    phone = normalize_phone(body.incharge_phone)
-    if not phone:
-        raise HTTPException(400, "Enter the in-charge's 10 digit phone number")
+    email = normalize_email(body.incharge_email)
+    if not email:
+        raise HTTPException(400, "Enter the in-charge's email address")
     dept = Department(
         name=body.name.strip(), incharge_name=body.incharge_name.strip(),
         place=body.place.strip(), lat=body.lat, lng=body.lng,
@@ -211,9 +211,9 @@ def create_department(body: DeptIn, me: Volunteer = Depends(require_super), sess
     # Copy the values now: the next commit makes the dept object stale.
     dept_id, dept_name, incharge_name = dept.id, dept.name, dept.incharge_name
     place, lat, lng = dept.place, dept.lat, dept.lng
-    v = session.exec(select(Volunteer).where(Volunteer.phone == phone)).first()
+    v = session.exec(select(Volunteer).where(Volunteer.email == email)).first()
     if not v:
-        v = Volunteer(phone=phone, name=incharge_name)
+        v = Volunteer(email=email, name=incharge_name)
     if not (v.is_admin and v.admin_dept_id is None):  # never reduce the top admin
         v.is_admin = True
         v.admin_dept_id = dept_id
@@ -232,7 +232,7 @@ def list_admins(me: Volunteer = Depends(require_admin), session: Session = Depen
         q = q.where(Volunteer.admin_dept_id == me.admin_dept_id)
     depts = {d.id: d.name for d in session.exec(select(Department)).all()}
     return [
-        {"id": v.id, "name": v.name, "phone": v.phone, "dept_id": v.admin_dept_id,
+        {"id": v.id, "name": v.name, "email": v.email, "dept_id": v.admin_dept_id,
          "dept_name": depts.get(v.admin_dept_id, "All departments")}
         for v in session.exec(q).all()
     ]
@@ -240,20 +240,20 @@ def list_admins(me: Volunteer = Depends(require_admin), session: Session = Depen
 
 @router.post("/admins")
 def add_admin(body: AdminIn, me: Volunteer = Depends(require_admin), session: Session = Depends(get_session)):
-    phone = normalize_phone(body.phone)
-    if not phone:
-        raise HTTPException(400, "Enter a 10 digit phone number")
+    email = normalize_email(body.email)
+    if not email:
+        raise HTTPException(400, "Enter a valid email address")
     dept_id = body.dept_id
     if me.admin_dept_id is not None:
         dept_id = me.admin_dept_id  # department admins can only add helpers to their own department
     if dept_id is not None and not session.get(Department, dept_id):
         raise HTTPException(404, "Department not found")
-    v = session.exec(select(Volunteer).where(Volunteer.phone == phone)).first()
+    v = session.exec(select(Volunteer).where(Volunteer.email == email)).first()
     if not v:
-        v = Volunteer(phone=phone, name=body.name.strip() or "Helper")
+        v = Volunteer(email=email, name=body.name.strip() or "Helper")
     if me.admin_dept_id is not None and v.is_admin and v.admin_dept_id != dept_id:
         raise HTTPException(403, "This person is an admin elsewhere")
-    if phone == SUPERADMIN_PHONE:
+    if SUPERADMIN_EMAIL and email == SUPERADMIN_EMAIL:
         raise HTTPException(400, "This is the top admin already")
     v.is_admin = True
     v.admin_dept_id = dept_id
@@ -267,7 +267,7 @@ def remove_admin(volunteer_id: int, me: Volunteer = Depends(require_admin), sess
     v = session.get(Volunteer, volunteer_id)
     if not v or not v.is_admin:
         raise HTTPException(404, "Admin not found")
-    if v.phone == SUPERADMIN_PHONE:
+    if SUPERADMIN_EMAIL and v.email == SUPERADMIN_EMAIL:
         raise HTTPException(400, "The top admin cannot be removed")
     if me.admin_dept_id is not None and (v.admin_dept_id != me.admin_dept_id or v.id == me.id):
         raise HTTPException(403, "You can only remove other helpers in your department")
