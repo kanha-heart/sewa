@@ -1,37 +1,27 @@
 # Sewa
 
-Volunteer requests for an ashram or centre. Admins (heads of departments) post work. Volunteers join for the whole shift or only some hours, and get alerts. It runs in the phone browser for volunteers **and** admins, and can be installed on the home screen like an app.
+Volunteer requests for a community. Admins (heads of departments) post work. Volunteers join for the whole shift or only some hours, and get alerts. It runs in the phone browser for volunteers **and** admins, and can be installed on the home screen like an app.
 
 - Server: Python (FastAPI + SQLModel). Database: Supabase Postgres online, a small file on your computer for testing.
 - Screens: plain HTML, CSS, JavaScript in the `static` folder. No build step.
 - Login: **email + one-time code**. WhatsApp number is optional, only for WhatsApp alerts.
 
-**How to use this README:** do the parts in order, A to H. Copy and paste the commands exactly. Every command is run in the Terminal, inside the `sewa` folder, with `(.venv)` showing at the start of the line. If something fails, go to **Part I (Problems)**, or paste the error to Claude.
+**How to use this README:** do the parts in order, A to H. Copy and paste the commands exactly. Every command is run in the Terminal, inside the `sewa` folder, with `(.venv)` showing at the start of the line. If something fails, go to **Part I (Problems)**
 
 ---
 
-## Part A. Update and run it on your computer
+## Part A. Run it on your computer
 
-You already have the `sewa` folder from before. These changes replace it.
 
-**A1. Put the new files in place.**
-1. Close the running server in the Terminal with `Ctrl+C` if it is running.
-2. Unzip the new `sewa.zip`. Copy everything inside its `sewa` folder over your own `sewa` folder and choose **Replace**.
-3. Do **not** delete your `.venv` folder.
+**A1. Put files in place.**
+1. Unzip the `sewa.zip`
 
-**A2. Delete the old database file.** The tables changed (email instead of phone), and an old file would break. Your old test data will be lost, which is fine.
-```bash
-cd ~/Desktop/sewa
-source .venv/bin/activate
-rm -f sewa.db
-```
-
-**A3. Install the new packages.**
+**A2. Install the new packages.**
 ```bash
 python -m pip install -r requirements.txt
 ```
 
-**A4. Update your settings file.** Open `.env` in VS Code. Replace its whole content with this and put **your own email** on the first line:
+**A3. Update settings file.** Open `.env` in VS Code. Copy below content with this and put **your own email** on the first line:
 ```
 SUPERADMIN_EMAIL=your-email@gmail.com
 DEV_MODE=1
@@ -46,24 +36,24 @@ WHATSAPP_PHONE_ID=
 ```
 (If you have no `.env` yet, run `cp .env.example .env` and edit it.)
 
-**A5. Run the automatic tests.** They must say `2 passed`.
+**A4. Run the automatic tests.** They must say `2 passed`.
 ```bash
 python -m pytest -q
 ```
-If it shows `F` or an error, do not continue. Copy the whole output to Claude.
+If it shows `F` or an error, do not continue. 
 
-**A6. Start the server.**
+**A5. Start the server.**
 ```bash
 uvicorn app.main:app --reload
 ```
 Open http://127.0.0.1:8000 in your browser.
 
-**A7. Log in.**
+**A6. Log in.**
 1. Type your email (the same one as `SUPERADMIN_EMAIL`) and press **Send code**.
 2. The code is shown on the screen (test mode) and also printed in the Terminal. Type your name, choose **Brothers** or **Sisters**, press **Sign in**.
 3. You see an **Admin** tab at the bottom. If you do not, the email does not match `.env`. Fix `.env`, stop the server (`Ctrl+C`), start it again, tap **Me, Sign out**, and log in again.
 
-**A8. Save your work in git.**
+**A7. Save your work in git.**
 ```bash
 git add .
 git commit -m "Email login, install support"
@@ -105,8 +95,6 @@ You do not need to create any tables. The app creates them on its first start.
 ---
 
 ## Part D. Email for login codes (Brevo, free)
-
-Render's free plan blocks normal email sending, so the app uses Brevo's web service. Brevo's free plan allows 300 emails a day after Brevo approves your account. (Menu names may differ a little. Look for the same words.)
 
 1. Sign up at https://www.brevo.com with your email and complete their questions.
 2. **Add a sender:** in Brevo go to **Senders, Domains & Dedicated IPs**, then **Senders**, **Add a sender**. Use an email address you own (a Gmail address is fine). Brevo emails you a link: click it to verify. This address will be your `EMAIL_FROM`.
@@ -235,12 +223,7 @@ tests/test_flow.py     automatic test of the main story
 
 ## Later
 
-**Play Store.** The app is a PWA, so it can be wrapped into an Android app (a Trusted Web Activity, with Bubblewrap or PWABuilder). You need a Google Play developer account (a one-time fee, check the current amount). A new personal account must run a closed test with at least 12 testers for 14 days before publishing publicly. Before that, an Android file can be sent directly to early testers. Ask Claude for help when you reach this point.
+**Play Store.** The app is a PWA, so it can be wrapped into an Android app (a Trusted Web Activity, with Bubblewrap or PWABuilder). You need a Google Play developer account (a one-time fee, check the current amount). A new personal account must run a closed test with at least 12 testers for 14 days before publishing publicly. Before that, an Android file can be sent directly to early testers. 
 
-**Growing.** Everything is standard Postgres and a plain Python server, so you can move hosts by changing `DATABASE_URL` and the Render service. Supabase Pro (from $25 a month) does not pause and has backups. Render has an always-on paid plan. WhatsApp costs money at scale (Meta bills per message, using approved templates), so in-app alerts and push notifications keep cost down.
+**Growing.** Everything is standard Postgres and a plain Python server, so you can move hosts by changing `DATABASE_URL` and the Render service. Supabase Pro  does not pause and has backups. Render has an always-on paid plan. WhatsApp costs money at scale (Meta bills per message, using approved templates), so in-app alerts and push notifications keep cost down.
 
-**Before many real users**
-- Add database migrations (Alembic). Right now tables are created only the first time, so changing a table later does not update existing ones.
-- Ask volunteers for consent before sending WhatsApp messages (the optional number in **Me** is that consent) and let them switch alerts off.
-- Server dates use the server clock. Check dates and times are what you expect for India.
-- Rotate the Supabase password and the Brevo key if you ever share them by mistake.
